@@ -1,0 +1,61 @@
+#include <stdio.h>
+#include <cuda_runtime.h>
+
+#define N 1048576  // 1 million éléments
+#define BLOCK_SIZE 256
+
+__global__ void reduce_sum(float* input, float* output, int n) {
+    __shared__ float sdata[BLOCK_SIZE];
+
+    int tid = threadIdx.x;
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+    // Charger en mémoire partagée
+    sdata[tid] = (idx < n) ? input[idx] : 0.0f;
+    __syncthreads();
+
+    // Reduction dans le bloc
+    for (int s = blockDim.x / 2; s > 0; s >>= 1) {
+        if (tid < s) {
+            sdata[tid] += sdata[tid + s];
+        }
+        __syncthreads();
+    }
+
+    // Écrire le résultat du bloc
+    if (tid == 0) output[blockIdx.x] = sdata[0];
+}
+
+int main() {
+    float *h_in = new float[N];
+    float *h_out;
+    for (int i = 0; i < N; i++) h_in[i] = 1.0f;
+
+    float *d_in, *d_out;
+    int numBlocks = (N + BLOCK_SIZE - 1) / BLOCK_SIZE;
+
+    cudaMalloc(&d_in, N * sizeof(float));
+    cudaMalloc(&d_out, numBlocks * sizeof(float));
+
+    cudaMemcpy(d_in, h_in, N * sizeof(float), cudaMemcpyHostToDevice);
+
+    // Lancer le kernel
+    reduce_sum<<<numBlocks, BLOCK_SIZE>>>(d_in, d_out, N);
+
+    // Copier résultat partiel sur CPU
+    h_out = new float[numBlocks];
+    cudaMemcpy(h_out, d_out, numBlocks * sizeof(float), cudaMemcpyDeviceToHost);
+
+    // Somme finale sur CPU
+    float sum = 0.0f;
+    for (int i = 0; i < numBlocks; i++) sum += h_out[i];
+
+    printf("Sum = %f\n", sum);
+
+    cudaFree(d_in);
+    cudaFree(d_out);
+    delete[] h_in;
+    delete[] h_out;
+
+    return 0;
+}
