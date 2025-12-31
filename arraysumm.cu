@@ -10,11 +10,11 @@ __global__ void reduce_sum(float* input, float* output, int n) {
     int tid = threadIdx.x;
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
-    // Charger en mémoire partagée
+    // on charge en shared memory
     sdata[tid] = (idx < n) ? input[idx] : 0.0f;
     __syncthreads();
 
-    // Reduction dans le bloc
+    // réduction ds le block
     for (int s = blockDim.x / 2; s > 0; s >>= 1) {
         if (tid < s) {
             sdata[tid] += sdata[tid + s];
@@ -22,7 +22,7 @@ __global__ void reduce_sum(float* input, float* output, int n) {
         __syncthreads();
     }
 
-    // Écrire le résultat du bloc
+    // 
     if (tid == 0) output[blockIdx.x] = sdata[0];
 }
 
@@ -39,14 +39,14 @@ int main() {
 
     cudaMemcpy(d_in, h_in, N * sizeof(float), cudaMemcpyHostToDevice);
 
-    // Lancer le kernel
+    // on launch le kernel
     reduce_sum<<<numBlocks, BLOCK_SIZE>>>(d_in, d_out, N);
 
-    // Copier résultat partiel sur CPU
+    // on copie chaque résultat partiel sur le CPU
     h_out = new float[numBlocks];
     cudaMemcpy(h_out, d_out, numBlocks * sizeof(float), cudaMemcpyDeviceToHost);
 
-    // Somme finale sur CPU
+    // somme finale sur le gpu
     float sum = 0.0f;
     for (int i = 0; i < numBlocks; i++) sum += h_out[i];
 
@@ -59,4 +59,5 @@ int main() {
 
     return 0;
 }
+
 
